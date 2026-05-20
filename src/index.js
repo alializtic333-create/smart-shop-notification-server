@@ -5,42 +5,71 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-const { initFirebase } = require('./firebase');
+const { initFirebase, verifyFirebaseConnection } = require('./firebase');
 const { optionalApiSecret } = require('./middleware/auth');
 const notificationsRouter = require('./routes/notifications');
 
-const app = express(); // 🔥 هذا هو الناقص عندك
-
 const port = Number(process.env.PORT) || 3000;
 
-console.log("STEP 1 - before firebase init");
+try {
+  initFirebase();
+} catch (err) {
+  console.error('FATAL: Firebase initialization failed:', err.message);
+  process.exit(1);
+}
 
-initFirebase();
+const app = express();
 
-console.log("STEP 2 - after firebase init");
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 app.use(helmet());
-
-app.use(cors({
-  origin: '*'
-}));
-
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (
+        !origin ||
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS not allowed'));
+      }
+    },
+  }),
+);
 app.use(express.json({ limit: '32kb' }));
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  }),
+);
 
-app.use(rateLimit({
-  windowMs: 60 * 1000,
-  max: 120
-}));
-
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+app.get('/health', async (_req, res) => {
+  try {
+    const fb = await verifyFirebaseConnection();
+    res.json({ ok: true, service: 'khuth-alsafi-notifications', firebase: fb });
+  } catch (err) {
+    console.error('Health check failed:', err.message);
+    res.status(503).json({
+      ok: false,
+      error: err.message,
+      code: err.code || null,
+    });
+  }
 });
 
 app.use('/api/notifications', optionalApiSecret, notificationsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ error: 'server error' });
+  res.status(500).json({ error: 'خطأ في الخادم' });
 });
 
 app.listen(port, () => {

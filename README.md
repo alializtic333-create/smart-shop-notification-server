@@ -26,12 +26,44 @@ npm run dev
 2. Build: `npm install`
 3. Start: `npm start`
 4. Environment Variables:
-   - `FIREBASE_SERVICE_ACCOUNT_JSON` = محتوى ملف JSON كاملاً (سطر واحد)
+   - `FIREBASE_SERVICE_ACCOUNT_JSON` — انظر **إعداد Credentials** أدناه
    - `NODE_ENV` = `production`
    - `ALLOWED_ORIGINS` = `*`
-   - `API_SECRET` = (اختياري) مفتاح عشوائي
+   - `API_SECRET` = مفتاح عشوائي (مطلوب لحماية `/test` على الإنتاج)
 
 5. انسخ رابط الخدمة، مثلاً `https://khuth-api.onrender.com`
+
+### إعداد Credentials على Render (مهم)
+
+1. Firebase Console → Project Settings → **Service accounts** → **Generate new private key**
+2. على جهازك (PowerShell):
+
+```powershell
+cd server
+node -e "const j=require('fs').readFileSync('serviceAccountKey.json','utf8'); console.log(JSON.stringify(JSON.parse(j)))"
+```
+
+3. انسخ **السطر الواحد** بالكامل إلى متغير `FIREBASE_SERVICE_ACCOUNT_JSON` في Render
+4. **لا** تضف علامات اقتباس خارجية إضافية حول JSON في لوحة Render
+5. تأكد أن الحساب له دور **Firebase Admin SDK Administrator Service Agent** (افتراضي عند إنشاء المفتاح)
+
+**تحقق بعد النشر:**
+
+```http
+GET https://your-api.onrender.com/health
+```
+
+يجب أن يعود: `{ "ok": true, "firebase": { "projectId": "...", "firestore": "ok" } }`
+
+**اختبار إشعار:**
+
+```http
+POST https://your-api.onrender.com/api/notifications/test
+X-API-Key: YOUR_API_SECRET
+Content-Type: application/json
+
+{ "userId": "FIREBASE_UID_WITH_fcmToken" }
+```
 
 ## النشر على Railway
 
@@ -48,7 +80,8 @@ Content-Type: application/json
 
 | Method | Path | الوصف |
 |--------|------|--------|
-| GET | `/health` | فحص الخادم |
+| GET | `/health` | فحص الخادم + اتصال Firestore |
+| POST | `/api/notifications/test` | اختبار FCM (يتطلب `X-API-Key` إن وُجد `API_SECRET`) |
 | POST | `/api/notifications/comment` | تعليق جديد + إشعار المتابعين (4 ساعات) |
 | POST | `/api/notifications/reply` | رد على تعليق |
 | POST | `/api/notifications/watcher` | تسجيل متابعة مطعم (تقييم/تفاعل) |
