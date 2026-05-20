@@ -111,6 +111,7 @@ router.post('/watcher', async (req, res) => {
     const result = await handleRegisterWatcher({
       restaurantId: req.body.restaurantId,
       userId: req.uid,
+      source: (req.body.source || 'interaction').toString(),
     });
     res.json(result);
   } catch (err) {
